@@ -1,10 +1,9 @@
+hopsworks[python]==4.2.*
 pandas
 numpy
-hopsworks==4.2.*
 python-dotenv
 requests
 scikit-learn
 joblib
-shutilwhich
 lightgbm
 xgboost
