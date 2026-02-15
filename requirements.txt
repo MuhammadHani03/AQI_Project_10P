@@ -11,3 +11,4 @@ streamlit==1.27.0
 pytz
 plotly==5.18.0
 matplotlib==3.8.0
+pillow==9.5.0
