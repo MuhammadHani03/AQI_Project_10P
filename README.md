@@ -1,6 +1,6 @@
 # 🌫️ Karachi AQI Forecasting System
 
-An end-to-end **Air Quality Index (AQI) forecasting system** for Karachi that predicts air quality for the next **24, 48, and 72 hours** using time-series machine learning models.
+An end-to-end **Air Quality Index (AQI) forecasting system** for Karachi that predicts air quality for the next **24, 48, and 72 hours** using time-series machine learning models on a 100% serverless architecture
 
 The project automates data ingestion, feature engineering, model training, versioning, and deployment, and serves real-time predictions through an interactive Streamlit dashboard.
 
