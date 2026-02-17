@@ -473,6 +473,7 @@ if st.button("Predict AQI (Next 3 Days)"):
 
     # Convert timestamps to PKT
     pkt_tz = pytz.timezone("Asia/Karachi")
+    df_line[TIMESTAMP_COL] = pd.to_datetime(df_line[TIMESTAMP_COL], errors="coerce")
     df_line[TIMESTAMP_COL] = df_line[TIMESTAMP_COL].dt.tz_convert(pkt_tz)
 
     # Determine which points are future
