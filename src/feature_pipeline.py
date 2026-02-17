@@ -186,15 +186,6 @@ def create_features_from_raw(new_raw_df=None):
     # --------------------------------------------------
     # UPSERT (critical fix)
     # --------------------------------------------------
-    fg.insert(
-        df_features,
-        write_options={
-            "operation": "upsert",
-            "wait_for_job": True
-        }
-    )
-
-    print(f"🚀 Upserted {len(df_features)} feature rows.")
 
 # Attempt to UPSERT with retries to handle transient connection failures
     import time
