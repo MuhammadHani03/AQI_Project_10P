@@ -71,7 +71,7 @@ def update_state(last_timestamp):
 def fetch_data():
     """Fetch new data from Open-Meteo and avoid future timestamps."""
     last_ts = read_state()
-    start_ts = (last_ts + pd.Timedelta(hours=1)) if last_ts else pd.Timestamp("2025-01-01 00:00:00", tz="UTC")
+    start_ts = (last_ts) if last_ts else pd.Timestamp("2025-01-01 00:00:00", tz="UTC")
     
     end_ts = pd.Timestamp.now(tz="UTC").floor("h")
 
