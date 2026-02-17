@@ -108,99 +108,130 @@ def feature_engineering(df):
 
 
 def create_features_from_raw(new_raw_df=None):
-    """Create features from raw data.
-
-    If `new_raw_df` is provided, only compute features for timestamps that
-    are new compared to the existing features FG, using a historical window
-    sufficient for lags/rolling (24h by default).
     """
+    Create / update feature group from raw data.
+
+    Fixes:
+    - Recomputes sufficient historical window (for 72h forward targets)
+    - Recalculates previously NaN rows
+    - Uses UPSERT instead of append
+    """
+
     project = hopsworks.login()
     fs = project.get_feature_store()
 
-    # --- Read raw data ---
     raw_fg = fs.get_feature_group(name=RAW_FG_NAME, version=FG_VERSION)
     df_raw_full = raw_fg.read()
+
     if df_raw_full.empty:
         print("⚠️ No raw data found.")
         return
 
-    # If no new_raw_df provided, behave as before (recompute all features)
+    df_raw_full["time"] = pd.to_datetime(df_raw_full["time"], utc=True)
+    df_raw_full = df_raw_full.sort_values("time").reset_index(drop=True)
+
+    # --------------------------------------------------
+    # If no new_raw_df provided → full recompute
+    # --------------------------------------------------
     if new_raw_df is None or new_raw_df.empty:
+        print("🔄 Recomputing full feature dataset...")
         df_features = feature_engineering(df_raw_full)
+
     else:
-        # Determine required historical window (max lag / rolling used in feature_engineering)
-        history_hours = 24
-        new_min = pd.to_datetime(new_raw_df["time"]).min()
-        new_max = pd.to_datetime(new_raw_df["time"]).max()
-        if new_min.tzinfo is None:
-            new_min = new_min.tz_localize("UTC")
-        if new_max.tzinfo is None:
-            new_max = new_max.tz_localize("UTC")
+        print("🔄 Incremental recompute with horizon correction...")
 
-        start_needed = new_min - pd.Timedelta(hours=history_hours)
+        # Max forward horizon = 72h
+        MAX_HORIZON = 72
+        BUFFER = 24
 
-        # Subset raw data to the needed window (safe even if df_raw_full small)
-        df_subset = df_raw_full.copy()
-        df_subset["time"] = pd.to_datetime(df_subset["time"]).dt.tz_convert("UTC")
-        df_subset = df_subset[df_subset["time"] >= start_needed].sort_values("time").reset_index(drop=True)
+        new_min = pd.to_datetime(new_raw_df["time"], utc=True).min()
+        new_max = pd.to_datetime(new_raw_df["time"], utc=True).max()
 
-        # Compute features on the subset, then keep only rows that correspond to new_raw_df times
-        df_features_all = feature_engineering(df_subset)
+        # Recompute window:
+        # include enough past + enough future
+        start_needed = new_min - pd.Timedelta(hours=MAX_HORIZON + BUFFER)
+        end_needed = new_max + pd.Timedelta(hours=MAX_HORIZON)
 
-        # Only keep feature rows within the new timestamps range
-        df_features = df_features_all[(df_features_all["time"] >= new_min) & (df_features_all["time"] <= new_max)].copy()
+        df_subset = df_raw_full[
+            (df_raw_full["time"] >= start_needed) &
+            (df_raw_full["time"] <= end_needed)
+        ].copy()
 
-    # --- Upload features (append only new rows if FG exists) ---
+        df_subset = df_subset.sort_values("time").reset_index(drop=True)
+
+        df_features = feature_engineering(df_subset)
+
+    # --------------------------------------------------
+    # Create / get feature group
+    # --------------------------------------------------
     try:
-        fg = fs.get_feature_group(name="karachi_aqi_features_oct", version=FG_VERSION)
+        fg = fs.get_feature_group(
+            name="karachi_aqi_features_oct",
+            version=FG_VERSION
+        )
         if fg is None:
-            raise Exception("Features FG not found, creating...")
-        print(f"✅ Feature group 'karachi_aqi_features_oct' found.")
-        # read existing to detect already-uploaded times
-        existing = fg.read()
-        if not existing.empty:
-            existing_max = pd.to_datetime(existing["time"]).max()
-            if existing_max.tzinfo is None:
-                existing_max = existing_max.tz_localize("UTC")
-            df_to_upload = df_features[pd.to_datetime(df_features["time"]) > existing_max]
-        else:
-            df_to_upload = df_features
+            raise Exception("FG not found")
+        print("✅ Feature group found.")
     except Exception:
         fg = fs.create_feature_group(
-            name="karachi_aqi_features",
+            name="karachi_aqi_features_oct",
             version=FG_VERSION,
             description="Karachi AQI engineered features",
             primary_key=["time"],
             event_time="time",
             online_enabled=False
         )
-        print(f"✅ Feature group 'karachi_aqi_features_oct' created.")
-        df_to_upload = df_features
+        print("✅ Feature group created.")
 
-    if df_to_upload is None or df_to_upload.empty:
-        print("⚠️ No new feature rows to upload.")
-        return
+    # --------------------------------------------------
+    # UPSERT (critical fix)
+    # --------------------------------------------------
+    fg.insert(
+        df_features,
+        write_options={
+            "operation": "upsert",
+            "wait_for_job": True
+        }
+    )
 
-    # Attempt to insert with retries to handle transient connection failures
+    print(f"🚀 Upserted {len(df_features)} feature rows.")
+
+# Attempt to UPSERT with retries to handle transient connection failures
     import time
     from requests.exceptions import ConnectionError as RequestsConnectionError
     from urllib3.exceptions import ProtocolError
     from http.client import RemoteDisconnected as HTTPRemoteDisconnected
 
+    if df_features is None or df_features.empty:
+        print("⚠️ No feature rows to upsert.")
+        return
+
     max_retries = 5
+
     for attempt in range(1, max_retries + 1):
         try:
-            fg.insert(df_to_upload, write_options={"offline": True, "wait_for_job": True})
-            print(f"🚀 Uploaded {len(df_to_upload)} new feature rows to Hopsworks.")
+            fg.insert(
+            df_features,
+            write_options={
+                "operation": "upsert",   # 🔥 critical change
+                "wait_for_job": True
+            }
+        )
+            print(f"🚀 Upserted {len(df_features)} feature rows to Hopsworks.")
             break
+
         except (RequestsConnectionError, ProtocolError, HTTPRemoteDisconnected) as e:
             print(f"⚠️ Hopsworks connection error on attempt {attempt}: {e}")
+
             if attempt == max_retries:
-                print("❌ Max retries reached — aborting upload.")
+                print("❌ Max retries reached — aborting upsert.")
                 raise
+
             sleep_time = 2 ** attempt
             print(f"   Retrying in {sleep_time}s...")
             time.sleep(sleep_time)
+
         except Exception as e:
-            print(f"❌ Upload failed: {e}")
+            print(f"❌ Upsert failed: {e}")
             raise
+
