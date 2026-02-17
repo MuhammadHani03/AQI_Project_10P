@@ -25,34 +25,16 @@ TIMESTAMP_COL = "time"
 def load_model_and_info():
     project = hopsworks.login(api_key_value=st.secrets["HOPSWORKS_API_KEY"])
     mr = project.get_model_registry()
-    # We register models using a base name + timestamp (e.g. "1_year_champ_YYYYMMDDHHMMSS").
-    # Find all registered models whose name starts with the base and pick the one
-    # with the best (lowest) RMSE recorded in `training_metrics`.
+
+    # Base model name
     base_name = "1_year_champ"
 
-    candidates = []
     try:
-        all_models = mr.get_models()  # Try exact name first to reduce candidates (if registration was consistent)
-        for m in all_models:
-            try:
-                if isinstance(m.name, str) and m.name.startswith(base_name):
-                    candidates.append(m)
-            except Exception:
-                continue
+        # Get the best model automatically based on RMSE (lower is better)
+        best_model_obj = mr.get_best_model(name=base_name, metric="rmse", direction="min")
     except Exception:
-        # Fallback: try exact base name/version 1
-        try:
-            m = mr.get_model(name=base_name, version=1)
-            if m is not None:
-                candidates.append(m)
-        except Exception:
-            pass
-
-    if not candidates:
-
-        # 🔁 Fallback to local model if nothing found in registry
+        # Fallback to local model if nothing found in registry
         local_model_path = os.path.join("aqi_model_dir", "model.pkl")
-
         if os.path.exists(local_model_path):
             loaded_model = joblib.load(local_model_path)
 
@@ -65,7 +47,6 @@ def load_model_and_info():
                     "R2": "N/A",
                 },
             }
-
             return loaded_model, model_info
 
         raise RuntimeError(
@@ -73,24 +54,7 @@ def load_model_and_info():
             "Ensure models were registered and the API key/project have access."
         )
 
-    # Select best by RMSE (lower is better). If RMSE missing, treat as +inf.
-    best_model_obj = None
-    best_rmse = float("inf")
-    for m in candidates:
-        metrics = getattr(m, "training_metrics", {}) or {}
-        rmse = metrics.get("rmse")
-        try:
-            rmse_val = float(rmse)
-        except Exception:
-            rmse_val = float("inf")
-        if rmse_val < best_rmse:
-            best_rmse = rmse_val
-            best_model_obj = m
-
-    if best_model_obj is None:
-        # Last resort: pick the first candidate
-        best_model_obj = candidates[0]
-
+    # Download and load the best model
     model_dir = best_model_obj.download()
     model_path = os.path.join(model_dir, "model.pkl")
     loaded_model = joblib.load(model_path)
@@ -110,6 +74,7 @@ def load_model_and_info():
 
     return loaded_model, model_info
 
+# Load model
 model, model_info = load_model_and_info()
 
 
@@ -135,13 +100,14 @@ def get_latest_features():
 
     input_features = latest_row.drop(TARGET_COLS + [TIMESTAMP_COL])
     features_df = pd.DataFrame([input_features.values], columns=input_features.index)
+
     return features_df, latest_row
 
 
 # MAKE PREDICTIONS
 # -----------------------------
 def make_local_prediction(features_df):
-    predictions = model.predict(features_df)
+    predictions = model.predict(features_df.to_numpy())
     return predictions[0]
 
 
