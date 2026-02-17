@@ -148,8 +148,8 @@ python-dotenv
 
 ### 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/your-username/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/MuhammadHani03/AQI_Project_10P.git
+cd AQI_Project_10P
 ```
 
 ### 2️⃣ Create a Virtual Environment
