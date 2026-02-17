@@ -142,7 +142,7 @@ def create_features_from_raw(new_raw_df=None):
 
         # Max forward horizon = 72h
         MAX_HORIZON = 72
-        BUFFER = 24
+        BUFFER = 144
 
         new_min = pd.to_datetime(new_raw_df["time"], utc=True).min()
         new_max = pd.to_datetime(new_raw_df["time"], utc=True).max()
