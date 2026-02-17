@@ -147,5 +147,21 @@ def upload_raw_to_hopsworks(df: pd.DataFrame):
         )
         print(f"✅ Raw feature group '{RAW_FG_NAME}' created.")
 
-    fg.insert(df, write_options={"offline": True, "wait_for_job": True})
-    print(f"🚀 Uploaded {len(df)} raw rows to Hopsworks.")
+    from requests.exceptions import ConnectionError as RequestsConnectionError
+    from urllib3.exceptions import ProtocolError
+    from http.client import RemoteDisconnected as HTTPRemoteDisconnected
+
+    max_retries = 5
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            fg.insert(df, write_options={"offline": True, "wait_for_job": True})
+            print(f"🚀 Uploaded {len(df)} raw rows to Hopsworks.")
+            break
+        except (RequestsConnectionError, ProtocolError, HTTPRemoteDisconnected) as e:
+            print(f"⚠️ Connection error on attempt {attempt}: {e}")
+            if attempt == max_retries:
+                raise
+            sleep_time = 2 ** attempt
+            print(f"   Retrying in {sleep_time}s...")
+            time.sleep(sleep_time)
