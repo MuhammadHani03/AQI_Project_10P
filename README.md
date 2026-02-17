@@ -185,12 +185,6 @@ set HOPSWORKS_API_KEY=your_key_here
 export HOPSWORKS_API_KEY=your_key_here
 ```
 
-### 5️⃣ Run the Streamlit App
-```bash
-streamlit run app/app.py
-```
-
----
 
 ## 🔄 Running Pipelines Manually
 ```bash
@@ -199,6 +193,11 @@ python src/single_fetch.py
 
 # Run the training pipeline
 python src/training_pipeline.py
+```
+
+### 5️⃣ Run the Streamlit App
+```bash
+streamlit run app/app.py
 ```
 
 ---
