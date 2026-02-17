@@ -5,6 +5,9 @@ An end-to-end **Air Quality Index (AQI) forecasting system** for Karachi that pr
 The project automates data ingestion, feature engineering, model training, versioning, and deployment, and serves real-time predictions through an interactive Streamlit dashboard.
 
 ---
+# Live App: 
+
+https://karachiaqipredictor10.streamlit.app/
 
 ## 🚀 Project Overview
 
