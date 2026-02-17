@@ -465,44 +465,40 @@ if st.button("Predict AQI (Next 3 Days)"):
         "AQI": predictions
 })
 
-    # Trace 1: Past → Current (dark blue)
-    df_past_current = df_hist_current.copy()
+   # Combine past + current + forecast into one dataframe
+    df_line = pd.concat([
+    df_hist_current.rename(columns={"us_aqi": "AQI"}),  # past + current
+    df_future
+    ], ignore_index=True)
 
-    # Trace 2: Current → Forecast (light blue)
-    # Include current as first point to connect smoothly
-    df_current_future = pd.concat([df_hist_current.tail(1), df_future], ignore_index=True)
+    # Convert timestamps to PKT
+    pkt_tz = pytz.timezone("Asia/Karachi")
+    df_line[TIMESTAMP_COL] = df_line[TIMESTAMP_COL].dt.tz_convert(pkt_tz)
 
-    # Plot
+    # Determine which points are future
+    df_line["is_forecast"] = [False]*len(df_hist_current) + [True]*len(df_future)
+
+    # Single line trace
     fig_line = go.Figure()
-
-    # Past → Current
     fig_line.add_trace(go.Scatter(
-        x=df_past_current[TIMESTAMP_COL],
-        y=df_past_current["us_aqi"],
-        mode="lines+markers",
-        name="Past → Current",
-        line=dict(color="#0d47a1", width=3),
-        marker=dict(size=8) 
-    ))
+    x=df_line[TIMESTAMP_COL],
+    y=df_line["AQI"],
+    mode="lines+markers",
+    line=dict(color="#0d47a1", width=3),  # continuous line
+    marker=dict(
+        size=8,
+        color=np.where(df_line["is_forecast"], "#42a5f5", "#0d47a1")  # past/current = dark blue, future = light blue
+    ),
+    name="AQI"
+))
 
-    # Current → Forecast
-    fig_line.add_trace(go.Scatter(
-        x=df_current_future[TIMESTAMP_COL],
-        y=df_current_future["AQI"],
-        mode="lines+markers",
-        name="Current → Forecast",
-        line=dict(color="#42a5f5", width=3),
-        marker=dict(size=8)
-    ))
-
-    fig_line.update_traces(textposition="top center")
     fig_line.update_layout(
-        template="plotly_white",
-        font=dict(family="Segoe UI", size=12, color="#0d47a1"),
-        height=500,
-        xaxis_title="Time (PKT)",
-        yaxis_title="AQI",
-        showlegend=False
-    )
+    template="plotly_white",
+    font=dict(family="Segoe UI", size=12, color="#0d47a1"),
+    height=500,
+    xaxis_title="Time (PKT)",
+    yaxis_title="AQI",
+    showlegend=False
+)
 
     st.plotly_chart(fig_line, use_container_width=True)
